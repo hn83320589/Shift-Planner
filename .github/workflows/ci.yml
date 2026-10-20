@@ -7,7 +7,13 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    # 主管使用 Windows，因此除了 Ubuntu 也在 Windows 上建置與測試
+    # （OR-Tools 原生程式庫、Asia/Taipei 時區解析在兩個平台的行為都要驗證）
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -18,7 +24,9 @@ jobs:
       - name: Restore
         run: dotnet restore ShiftPlanner.sln
 
+      # Windows 的 checkout 預設轉成 CRLF，格式檢查只在 Ubuntu 執行一次
       - name: Format check
+        if: runner.os == 'Linux'
         run: dotnet format ShiftPlanner.sln --verify-no-changes --no-restore
 
       - name: Build
