@@ -105,6 +105,7 @@ gantt
     title 驗證／產生 11 月時用到的範圍
     dateFormat YYYY-MM-DD
     axisFormat %m/%d
+    todayMarker off
     section 班表
     10 月（已發布 → 前月上下文，唯讀）        :done, prev, 2026-10-19, 2026-11-01
     11 月（本次驗證／產生的範圍）              :active, horizon, 2026-11-01, 2026-12-01
