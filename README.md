@@ -15,7 +15,7 @@
 需求：[.NET 10 SDK](https://dotnet.microsoft.com/download)。不需要 Docker 或資料庫伺服器。
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/hn83320589/Shift-Planner.git
 cd Shift-Planner
 dotnet run --project src/ShiftPlanner.Web
 ```
