@@ -5,7 +5,8 @@ using ShiftPlanner.Data.Seed;
 namespace ShiftPlanner.Scheduling.Tests;
 
 /// <summary>下個月已發布時，產生與重排都要把下個月開頭當成固定的限制。</summary>
-public class CrossMonthTests(GeneratedNovemberFixture fixture) : IClassFixture<GeneratedNovemberFixture>
+[Collection(SampleScheduleCollection.Name)]
+public class CrossMonthTests(GeneratedNovemberFixture fixture)
 {
     private static readonly DateOnly Nov30 = new(2026, 11, 30);
     private readonly ShiftScheduleGenerator _generator = new(TimeProvider.System);

@@ -48,20 +48,37 @@ internal static class SampleScenario
             request.Following));
 }
 
-/// <summary>10、11 月只產生一次，讓多個測試共用（求解需要數秒）。</summary>
+/// <summary>
+/// 10、11、12 月只產生一次，由所有需要範例班表的測試類別共用。
+/// 放在同一個 collection 中，這些吃 CPU 的求解測試會依序執行，不會同時搶 CPU 導致逾時。
+/// </summary>
 public sealed class GeneratedNovemberFixture
 {
     public GeneratedNovemberFixture()
     {
         var generator = new ShiftScheduleGenerator(TimeProvider.System);
-        OctoberResult = generator.Generate(SampleScenario.OctoberRequest());
+        OctoberResult = EnsureSucceeded("10 月", generator.Generate(SampleScenario.OctoberRequest()));
         NovemberRequest = SampleScenario.NovemberRequest(OctoberResult.Assignments);
-        NovemberResult = generator.Generate(NovemberRequest);
-        DecemberResult = generator.Generate(SampleScenario.DecemberRequest(NovemberResult.Assignments));
+        NovemberResult = EnsureSucceeded("11 月", generator.Generate(NovemberRequest));
+        DecemberResult = EnsureSucceeded("12 月", generator.Generate(SampleScenario.DecemberRequest(NovemberResult.Assignments)));
     }
+
+    /// <summary>範例班表產生失敗時立即說明原因，而不是讓後面的測試拿到空班表、出現誤導的錯誤。</summary>
+    private static GenerationResult EnsureSucceeded(string month, GenerationResult result) =>
+        result.Succeeded
+            ? result
+            : throw new InvalidOperationException(
+                $"範例 {month}班表產生失敗：{result.Status}，耗時 {result.Elapsed.TotalSeconds:0.0} 秒，"
+                + string.Join("；", result.Reasons.Select(r => r.Message)));
 
     public GenerationResult OctoberResult { get; }
     public GenerationRequest NovemberRequest { get; }
     public GenerationResult NovemberResult { get; }
     public GenerationResult DecemberResult { get; }
+}
+
+[CollectionDefinition(Name)]
+public sealed class SampleScheduleCollection : ICollectionFixture<GeneratedNovemberFixture>
+{
+    public const string Name = "範例班表";
 }

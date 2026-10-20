@@ -4,7 +4,8 @@ using ShiftPlanner.Data.Seed;
 
 namespace ShiftPlanner.Scheduling.Tests;
 
-public class InfeasibilityDiagnosisTests(GeneratedNovemberFixture fixture) : IClassFixture<GeneratedNovemberFixture>
+[Collection(SampleScheduleCollection.Name)]
+public class InfeasibilityDiagnosisTests(GeneratedNovemberFixture fixture)
 {
     private static readonly DateOnly Nov14 = new(2026, 11, 14);
 

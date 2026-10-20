@@ -7,7 +7,8 @@ namespace ShiftPlanner.Scheduling.Tests;
 /// 月底不完整的週（10/26～11/1）：10 月只要求休 1 天，11/1 才補上第 2 天。
 /// 若太多人在 10 月底只休 1 天，11/1 就排不出人。
 /// </summary>
-public class MonthBoundaryWeekTests(GeneratedNovemberFixture fixture) : IClassFixture<GeneratedNovemberFixture>
+[Collection(SampleScheduleCollection.Name)]
+public class MonthBoundaryWeekTests(GeneratedNovemberFixture fixture)
 {
     private static readonly DateOnly Nov1 = new(2026, 11, 1);
 

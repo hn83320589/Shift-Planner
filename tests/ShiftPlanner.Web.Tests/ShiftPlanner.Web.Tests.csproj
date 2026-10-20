@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <None Include="..\..\data\holidays-2026.json" Link="data\holidays-2026.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 每個測試都會啟動系統並以 CP-SAT 產生 10 月班表；平行執行時在 CI 的少核心機器上會互搶 CPU -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

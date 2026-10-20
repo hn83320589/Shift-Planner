@@ -5,7 +5,8 @@ using Xunit.Abstractions;
 
 namespace ShiftPlanner.Scheduling.Tests;
 
-public class ReschedulerTests(GeneratedNovemberFixture fixture, ITestOutputHelper output) : IClassFixture<GeneratedNovemberFixture>
+[Collection(SampleScheduleCollection.Name)]
+public class ReschedulerTests(GeneratedNovemberFixture fixture, ITestOutputHelper output)
 {
     private static readonly DateOnly LeaveStart = new(2026, 11, 16);
     private static readonly DateOnly LeaveEnd = new(2026, 11, 20);

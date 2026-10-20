@@ -5,7 +5,8 @@ using Xunit.Abstractions;
 
 namespace ShiftPlanner.Scheduling.Tests;
 
-public class ShiftScheduleGeneratorTests(GeneratedNovemberFixture fixture, ITestOutputHelper output) : IClassFixture<GeneratedNovemberFixture>
+[Collection(SampleScheduleCollection.Name)]
+public class ShiftScheduleGeneratorTests(GeneratedNovemberFixture fixture, ITestOutputHelper output)
 {
     [Fact]
     public void 範例資料產生11月班表_60秒內完成且validator零違規()
