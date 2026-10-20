@@ -4,7 +4,7 @@ namespace ShiftPlanner.Core.Validation;
 
 /// <summary>
 /// H2：每週（週一到週日）至少 2 天沒有任何班次開始。
-/// 範圍結束後的未知天數可以用來補足，因此月底不完整的週只要求 max(0, 2 − 未知天數)。
+/// 已知範圍（含後續上下文）之後的未知天數可以用來補足，因此不完整的週只要求 max(0, 2 − 未知天數)。
 /// </summary>
 public sealed class WeeklyDaysOffRule : IHardRule
 {
@@ -19,7 +19,7 @@ public sealed class WeeklyDaysOffRule : IHardRule
             foreach (var monday in horizon.WeekStarts())
             {
                 var sunday = monday.AddDays(6);
-                var unknownDays = Math.Max(0, sunday.DayNumber - horizon.End.DayNumber);
+                var unknownDays = Math.Max(0, sunday.DayNumber - snapshot.KnownUntil.DayNumber);
                 var required = Math.Max(0, RequiredDaysOff - unknownDays);
                 var knownDays = 7 - unknownDays;
                 var worked = Enumerable.Range(0, knownDays).Count(i => workDates.Contains(monday.AddDays(i)));

@@ -32,7 +32,8 @@ internal static class TestData
         IEnumerable<Leave>? leaves = null,
         IStaffingCalendar? calendar = null,
         ShiftCatalog? catalog = null,
-        DateRange? horizon = null) =>
+        DateRange? horizon = null,
+        FollowingContext? following = null) =>
         new(
             horizon ?? November,
             (employees ?? [FullTime(1)]).ToList(),
@@ -40,7 +41,11 @@ internal static class TestData
             calendar ?? new FixedStaffingCalendar(),
             context?.ToList(),
             leaves?.ToList(),
-            catalog);
+            catalog,
+            following);
+
+    /// <summary>12 月整月已發布，作為 11 月的後續上下文。</summary>
+    public static FollowingContext December(params Assignment[] assignments) => new(D("2026-12-31"), assignments);
 
     public static List<Violation> ViolationsOf(this ValidationResult result, RuleCode code) =>
         result.Violations.Where(v => v.Code == code).ToList();
