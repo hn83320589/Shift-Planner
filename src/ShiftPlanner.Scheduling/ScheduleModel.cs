@@ -17,6 +17,7 @@ internal sealed class ScheduleModel
     public const long BaselineChangeWeight = 500;
     public const long WeekendSpreadWeight = 50;
     public const long NightSpreadWeight = 20;
+    public const long DeferredRestWeight = 30;
     public const long ShiftCost = 1;
 
     private readonly GenerationRequest _request;
@@ -169,8 +170,28 @@ internal sealed class ScheduleModel
 
                 Model.AddLinearConstraint(worked, 0, knownDays.Count - requiredOff);
                 Model.AddLinearConstraint(minutes, 0, employee.WeeklyHourLimit * 60L);
+
+                if (requiredOff < WeeklyDaysOffRule.RequiredDaysOff && !_elastic)
+                {
+                    DiscourageDeferredRest(worked, knownDays.Count, $"{employee.Id}_{monday:MMdd}");
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// 月底不完整的週只要求休 max(0, 2 − 未知天數) 天，剩下的休假會被推給下個月；
+    /// 太多人同時這樣做，下個月第一天就可能排不出人。每推一天給下個月就加一點成本。
+    /// </summary>
+    private void DiscourageDeferredRest(LinearExpr worked, int knownDays, string name)
+    {
+        var deferred = Model.NewIntVar(0, WeeklyDaysOffRule.RequiredDaysOff, $"deferred_rest_{name}");
+        // deferred ≥ 2 − (已知天數 − 上班天數)
+        Model.AddLinearConstraint(
+            LinearExpr.NewBuilder().Add(worked).AddTerm(deferred, -1),
+            long.MinValue,
+            knownDays - WeeklyDaysOffRule.RequiredDaysOff);
+        _objective.AddTerm(deferred, DeferredRestWeight);
     }
 
     private void AddConsecutiveDays()

@@ -13,6 +13,7 @@ internal static class FeasibilityPrecheck
     {
         var reasons = new List<InfeasibilityReason>();
         reasons.AddRange(CheckSlots(request));
+        reasons.AddRange(CheckDailyHeadcount(request));
         reasons.AddRange(CheckWeeklyCapacity(request));
         return reasons;
     }
@@ -62,6 +63,108 @@ internal static class FeasibilityPrecheck
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 每天的總需求人數 vs. 當天能上班的人數。
+    /// 前後月份已確定的班可能讓某些人當天「必須休假」（跨月的週休息日、連續上班、週工時），
+    /// 這是月底不完整的週把排休推給下個月時最常見的無解原因，要明確指出人數。
+    /// </summary>
+    private static IEnumerable<InfeasibilityReason> CheckDailyHeadcount(GenerationRequest request)
+    {
+        var horizon = request.Horizon;
+        var knownUntil = request.Following?.KnownUntil ?? horizon.End;
+        var context = request.Context.ToLookup(a => a.EmployeeId);
+        var following = (request.Following?.Assignments ?? []).ToLookup(a => a.EmployeeId);
+        var shortestShiftHours = DisplayNames.AllShifts.Min(request.Catalog.HoursOf);
+
+        foreach (var date in horizon.Days())
+        {
+            var required = DisplayNames.AllShifts.Sum(s => request.Calendar.GetMinStaff(date, s));
+            var available = 0;
+            var forcedByPrevious = 0;
+            var forcedByNext = 0;
+            foreach (var employee in request.Employees)
+            {
+                if (request.Leaves.Any(l => l.EmployeeId == employee.Id && l.Contains(date))
+                    || !DisplayNames.AllShifts.Any(employee.CanWork))
+                {
+                    continue;
+                }
+
+                var before = context[employee.Id].Select(a => a.Date).ToHashSet();
+                var after = following[employee.Id].Select(a => a.Date).ToHashSet();
+                if (ForcedOff(date, before, after, employee.WeeklyHourLimit, out var byPrevious))
+                {
+                    if (byPrevious)
+                    {
+                        forcedByPrevious++;
+                    }
+                    else
+                    {
+                        forcedByNext++;
+                    }
+                }
+                else
+                {
+                    available++;
+                }
+            }
+
+            if (required <= available)
+            {
+                continue;
+            }
+
+            var causes = new List<string>();
+            if (forcedByPrevious > 0)
+            {
+                causes.Add($"{forcedByPrevious} 人因上個月月底的排班當天必須休假");
+            }
+
+            if (forcedByNext > 0)
+            {
+                causes.Add($"{forcedByNext} 人因下個月月初的排班當天必須休假");
+            }
+
+            var because = causes.Count > 0 ? $"，其中{string.Join("、", causes)}（每週休息日、連續上班或週工時限制）" : "";
+            yield return new InfeasibilityReason(date, null, required, available,
+                $"{date.ToLabel()} 共需要 {required} 人上班，但只有 {available} 人可排{because}");
+        }
+
+        // 當天是否因前後月份的班而必須休假；byPrevious 表示原因在上個月（跨越月初的週或連續段）
+        bool ForcedOff(DateOnly date, HashSet<DateOnly> before, HashSet<DateOnly> after, int weeklyHourLimit, out bool byPrevious)
+        {
+            var monday = date.WeekStart();
+            var sunday = monday.AddDays(6);
+            var weekDays = Enumerable.Range(0, 7).Select(monday.AddDays).ToList();
+            var horizonDays = weekDays.Count(d => horizon.Contains(d));
+            var unknownDays = Math.Max(0, sunday.DayNumber - knownUntil.DayNumber);
+            var requiredOff = Math.Max(0, WeeklyDaysOffRule.RequiredDaysOff - unknownDays);
+            var offOutside = weekDays.Count(d => (d < horizon.Start && !before.Contains(d)) || (d > horizon.End && d <= knownUntil && !after.Contains(d)));
+            var workedOutside = weekDays.Count(d => before.Contains(d) || after.Contains(d));
+            var forcedByWeek = requiredOff - offOutside >= horizonDays
+                || (workedOutside + 1) * shortestShiftHours > weeklyHourLimit;
+
+            var runBefore = 0;
+            while (before.Contains(horizon.Start.AddDays(-runBefore - 1)))
+            {
+                runBefore++;
+            }
+
+            var runAfter = 0;
+            while (after.Contains(horizon.End.AddDays(runAfter + 1)))
+            {
+                runAfter++;
+            }
+
+            var max = ConsecutiveDaysRule.MaxConsecutiveDays;
+            var forcedByRunBefore = runBefore >= max && date == horizon.Start;
+            var forcedByRunAfter = runAfter >= max && date == horizon.End;
+
+            byPrevious = forcedByRunBefore || (forcedByWeek && monday < horizon.Start);
+            return forcedByWeek || forcedByRunBefore || forcedByRunAfter;
         }
     }
 
