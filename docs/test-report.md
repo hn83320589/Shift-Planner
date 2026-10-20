@@ -41,7 +41,7 @@
 | 跨平台 | 在 Ubuntu 與 Windows 上建置並執行全部測試，各 3 次 | GitHub Actions |
 | 系統測試（API） | 從全新 clone 以 `dotnet run` 啟動，對真實 HTTP API 與 SQLite 逐項驗證驗收標準 | Python 腳本 |
 | 系統測試（UI） | 實際操作 Blazor 頁面 | Playwright（Chromium） |
-| 相容性 | ICS 用第三方 RFC 5545 解析器解析；CSV 用 Microsoft Excel 實際開啟，逐格比對 | `icalendar` 7.3.0、Excel for Mac（AppleScript） |
+| 相容性 | ICS 用第三方 RFC 5545 解析器解析，並由使用者實際匯入 Google 日曆；CSV 用 Microsoft Excel 實際開啟，逐格比對 | `icalendar` 7.3.0、Google 日曆（人工）、Excel for Mac（AppleScript） |
 | 穩定性 | 同一份資料連續產生 5 次；Scheduling、Web 測試在本機各連續跑 5 次；CI 重跑 3 次 | — |
 | 靜態檢查 | 時間相關邏輯是否全部透過 `TimeProvider` | grep |
 | 探索性測試 | 錯誤輸入、發布順序、12 月已發布後重排 11 月底 | Python 腳本 |
@@ -121,7 +121,7 @@ Web 沒有覆蓋到的部分主要是 Razor 頁面（沒有元件層級的單元
 | 9 | 11/16 起請假 5 天，只有之後的班被更動、零違規、列出更動清單，且證明之前完全沒變 | ✅ | 實際系統：提案時班表不變；套用後 11/16 之前完全相同；零違規、版本 2；實際差異和提案列出的 8 格完全一致，牽涉 5 人 |
 | 10 | 強烈偏好滿足率 ≥ 90%，報表列出未滿足項目 | ✅ | 5 次產生都是 100%（20/20）；報表列出的未滿足項目和實際被排班的偏好日完全一致 |
 | 11 | 全職夜班數差距 ≤ 2，並有測試 | ✅ | 5 次產生差距都是 0；報表標準差和自行計算一致 |
-| 12 | `.ics` 夜班結束在隔天 07:00、台北時區，並有單元測試 | ✅ | 16 人的 `.ics` 都能被 `icalendar` 解析：事件數正確、Asia/Taipei（+08:00）、夜班 `23:00 → 隔天 07:00`、每行 ≤ 75 octets |
+| 12 | `.ics` 夜班結束在隔天 07:00、台北時區，並有單元測試 | ✅ | 16 人的 `.ics` 都能被 `icalendar` 解析：事件數正確、Asia/Taipei（+08:00）、夜班 `23:00 → 隔天 07:00`、每行 ≤ 75 octets。**使用者已實際匯入 Google 日曆確認沒有問題** |
 | 13 | CSV 用 Excel 開啟中文不亂碼，數字與畫面一致 | ✅ | UTF-8 BOM；CSV 共 12 欄，除姓名與合約類型外都是純數字；**Excel 實際開啟後 204 格和 CSV 數值完全一致，沒有任何格子被轉成日期**；畫面表格和 CSV 由同一個 `MonthlyReportCsv.Cells` 產生 |
 | 14 | 單元測試至少 30 個，`dotnet test` 全數通過 | ✅ | 單元測試 93 個（加上整合測試共 116 個），全數通過；CI 在 Ubuntu 與 Windows 上也通過 |
 
@@ -262,7 +262,6 @@ Web 沒有覆蓋到的部分主要是 Razor 頁面（沒有元件層級的單元
 
 | 項目 | 說明 |
 |---|---|
-| 實際匯入 Google 日曆 | 需要使用者的 Google 帳號，這次沒有操作。改用第三方 RFC 5545 解析器確認格式、時區、夜班跨日都正確。**建議人工匯入一次確認。** |
 | Windows 版 Excel | 只在 Excel for Mac 實際開啟；Windows 平台的建置與測試已由 CI 涵蓋，但沒有在 Windows 上用 Excel 開啟。 |
 | 其他瀏覽器 | UI 只在 Chromium 測試。 |
 | Razor 元件單元測試 | 沒有 bUnit 元件測試，UI 由端對端測試涵蓋。 |
