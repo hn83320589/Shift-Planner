@@ -1,8 +1,11 @@
+using System.Text.Json.Serialization;
+
 using Microsoft.EntityFrameworkCore;
 
 using ShiftPlanner.Core.Validation;
 using ShiftPlanner.Data;
 using ShiftPlanner.Scheduling;
+using ShiftPlanner.Web.Api;
 using ShiftPlanner.Web.Application;
 using ShiftPlanner.Web.Components;
 using ShiftPlanner.Web.Infrastructure;
@@ -16,6 +19,9 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ScheduleValidator>();
 builder.Services.AddSingleton<ShiftScheduleGenerator>();
 builder.Services.AddScoped<PlanningDataLoader>();
+builder.Services.AddScoped<ScheduleService>();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddDbContext<ShiftPlannerDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("ShiftPlanner")
         ?? throw new InvalidOperationException("缺少連線字串 ConnectionStrings:ShiftPlanner")));
@@ -35,6 +41,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapScheduleApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

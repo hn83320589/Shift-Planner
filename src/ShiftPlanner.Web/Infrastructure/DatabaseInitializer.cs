@@ -1,10 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
-using ShiftPlanner.Core.Domain;
-using ShiftPlanner.Core.Validation;
 using ShiftPlanner.Data;
 using ShiftPlanner.Data.Seed;
-using ShiftPlanner.Scheduling;
 using ShiftPlanner.Web.Application;
 
 namespace ShiftPlanner.Web.Infrastructure;
@@ -31,27 +28,15 @@ public static class DatabaseInitializer
         }
 
         logger.LogInformation("已載入範例資料");
-        var october = await GeneratePublishedScheduleAsync(provider, SampleYear, SamplePublishedMonth, cancellationToken);
-        db.Schedules.Add(october);
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("已產生並發布 {Year}/{Month} 範例班表，共 {Count} 班", SampleYear, SamplePublishedMonth, october.Assignments.Count);
-    }
-
-    private static async Task<Schedule> GeneratePublishedScheduleAsync(
-        IServiceProvider provider, int year, int month, CancellationToken cancellationToken)
-    {
-        var data = await provider.GetRequiredService<PlanningDataLoader>().LoadAsync(year, month, cancellationToken);
-        var result = provider.GetRequiredService<ShiftScheduleGenerator>().Generate(data.GenerationRequest());
+        var schedules = provider.GetRequiredService<ScheduleService>();
+        var result = await schedules.GenerateDraftAsync(SampleYear, SamplePublishedMonth, cancellationToken);
         if (!result.Succeeded)
         {
             throw new InvalidOperationException(
-                $"範例 {year}/{month} 班表產生失敗：{string.Join("；", result.Reasons.Select(r => r.Message))}");
+                $"範例 {SampleYear}/{SamplePublishedMonth} 班表產生失敗：{string.Join("；", result.Reasons.Select(r => r.Message))}");
         }
 
-        var schedule = new Schedule(year, month);
-        schedule.ReplaceAll(result.Assignments);
-        var validation = provider.GetRequiredService<ScheduleValidator>().Validate(data.Snapshot(schedule.Assignments));
-        schedule.Publish(validation, provider.GetRequiredService<TimeProvider>().GetUtcNow());
-        return schedule;
+        await schedules.PublishAsync(SampleYear, SamplePublishedMonth, cancellationToken);
+        logger.LogInformation("已產生並發布 {Year}/{Month} 範例班表，共 {Count} 班", SampleYear, SamplePublishedMonth, result.Assignments.Count);
     }
 }
