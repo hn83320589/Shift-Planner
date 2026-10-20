@@ -405,7 +405,7 @@ table.roster {
 
 .roster td.cell.selected {
     outline: 2px solid var(--primary);
-    outline-offset: -2px;
+    outline-offset: -5px; /* 往內縮，避免蓋住違規的紅框 */
 }
 
 .roster td.cell.has-violation {
