@@ -15,11 +15,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\data\holidays-2026.json" Link="data\holidays-2026.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShiftPlanner.Scheduling\ShiftPlanner.Scheduling.csproj" />
+    <ProjectReference Include="..\..\src\ShiftPlanner.Data\ShiftPlanner.Data.csproj" />
   </ItemGroup>
 
 </Project>

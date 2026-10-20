@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 
+using ShiftPlanner.Core.Validation;
 using ShiftPlanner.Data;
+using ShiftPlanner.Scheduling;
+using ShiftPlanner.Web.Application;
 using ShiftPlanner.Web.Components;
 using ShiftPlanner.Web.Infrastructure;
 
@@ -10,6 +13,9 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ScheduleValidator>();
+builder.Services.AddSingleton<ShiftScheduleGenerator>();
+builder.Services.AddScoped<PlanningDataLoader>();
 builder.Services.AddDbContext<ShiftPlannerDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("ShiftPlanner")
         ?? throw new InvalidOperationException("缺少連線字串 ConnectionStrings:ShiftPlanner")));

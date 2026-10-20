@@ -4,6 +4,10 @@
     <ProjectReference Include="..\ShiftPlanner.Core\ShiftPlanner.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Google.OrTools" Version="9.15.6755" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
