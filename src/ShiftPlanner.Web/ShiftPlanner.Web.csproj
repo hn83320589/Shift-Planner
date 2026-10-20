@@ -6,6 +6,10 @@
     <ProjectReference Include="..\ShiftPlanner.Data\ShiftPlanner.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\data\holidays-2026.json" Link="data\holidays-2026.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
