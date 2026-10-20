@@ -61,7 +61,7 @@ public sealed class ShiftScheduleGenerator(TimeProvider time)
     {
         var snapshot = new ScheduleSnapshot(
             request.Horizon, request.Employees, assignments, request.Calendar,
-            request.Context, request.Leaves, request.Catalog);
+            request.Context, request.Leaves, request.Catalog, request.Following);
         var result = _validator.Validate(snapshot);
         if (!result.CanPublish)
         {

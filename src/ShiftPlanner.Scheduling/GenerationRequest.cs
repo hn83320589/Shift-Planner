@@ -12,6 +12,9 @@ public sealed record GenerationRequest
     /// <summary>Horizon 開始之前已確定的班次（前月已發布班表、重排時凍結的部分），視為常數。</summary>
     public IReadOnlyList<Assignment> Context { get; init; } = [];
 
+    /// <summary>Horizon 結束之後已確定的班次（已發布的下個月），視為常數。</summary>
+    public FollowingContext? Following { get; init; }
+
     public IReadOnlyList<Leave> Leaves { get; init; } = [];
     public IReadOnlyList<OffPreference> Preferences { get; init; } = [];
     public ShiftCatalog Catalog { get; init; } = ShiftCatalog.Standard;

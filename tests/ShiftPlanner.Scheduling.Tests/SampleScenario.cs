@@ -10,6 +10,7 @@ internal static class SampleScenario
 {
     public static readonly DateRange October = DateRange.ForMonth(2026, 10);
     public static readonly DateRange November = DateRange.ForMonth(2026, 11);
+    public static readonly DateRange December = DateRange.ForMonth(2026, 12);
 
     private static readonly Lazy<IReadOnlyList<Holiday>> Holidays = new(() =>
         HolidayJsonParser.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "data", "holidays-2026.json"))));
@@ -33,9 +34,18 @@ internal static class SampleScenario
         Preferences = SampleData.NovemberPreferences,
     };
 
+    public static GenerationRequest DecemberRequest(IReadOnlyList<Assignment> novemberContext) => new()
+    {
+        Horizon = December,
+        Employees = SampleData.Employees,
+        Calendar = Calendar(),
+        Context = novemberContext,
+    };
+
     public static ValidationResult Validate(GenerationRequest request, IReadOnlyList<Assignment> assignments) =>
         new ScheduleValidator().Validate(new ScheduleSnapshot(
-            request.Horizon, request.Employees, assignments, request.Calendar, request.Context, request.Leaves, request.Catalog));
+            request.Horizon, request.Employees, assignments, request.Calendar, request.Context, request.Leaves, request.Catalog,
+            request.Following));
 }
 
 /// <summary>10、11 月只產生一次，讓多個測試共用（求解需要數秒）。</summary>
@@ -47,9 +57,11 @@ public sealed class GeneratedNovemberFixture
         OctoberResult = generator.Generate(SampleScenario.OctoberRequest());
         NovemberRequest = SampleScenario.NovemberRequest(OctoberResult.Assignments);
         NovemberResult = generator.Generate(NovemberRequest);
+        DecemberResult = generator.Generate(SampleScenario.DecemberRequest(NovemberResult.Assignments));
     }
 
     public GenerationResult OctoberResult { get; }
     public GenerationRequest NovemberRequest { get; }
     public GenerationResult NovemberResult { get; }
+    public GenerationResult DecemberResult { get; }
 }

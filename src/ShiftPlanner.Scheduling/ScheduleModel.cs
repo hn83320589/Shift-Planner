@@ -22,6 +22,7 @@ internal sealed class ScheduleModel
     private readonly GenerationRequest _request;
     private readonly Dictionary<(int Employee, DateOnly Date, ShiftType Shift), BoolVar> _x = [];
     private readonly HashSet<(int Employee, DateOnly Date, ShiftType Shift)> _context;
+    private readonly HashSet<(int Employee, DateOnly Date, ShiftType Shift)> _following;
     private readonly LinearExprBuilder _objective = LinearExpr.NewBuilder();
     private readonly bool _elastic;
     private readonly List<DemandSlack> _slacks = [];
@@ -35,6 +36,7 @@ internal sealed class ScheduleModel
         _request = request;
         _elastic = elastic;
         _context = request.Context.Select(a => (a.EmployeeId, a.Date, a.Shift)).ToHashSet();
+        _following = (request.Following?.Assignments ?? []).Select(a => (a.EmployeeId, a.Date, a.Shift)).ToHashSet();
         Build();
     }
 
@@ -43,6 +45,9 @@ internal sealed class ScheduleModel
     public IReadOnlyList<DemandSlack> Slacks => _slacks;
 
     private DateRange Horizon => _request.Horizon;
+
+    /// <summary>班次確定到哪一天；之後的日子是未知的，可以用來補足休息日。</summary>
+    private DateOnly KnownUntil => _request.Following?.KnownUntil ?? Horizon.End;
 
     public IReadOnlyList<Assignment> ExtractAssignments(CpSolver solver) =>
         _x.Where(kv => solver.BooleanValue(kv.Value))
@@ -101,7 +106,7 @@ internal sealed class ScheduleModel
         }
     }
 
-    /// <summary>找出休息不足的「前一班 → 後一班」組合，禁止同時出現。</summary>
+    /// <summary>找出休息不足的「前一班 → 後一班」組合，禁止同時出現；前後月份的班次以常數代入。</summary>
     private void AddRestPeriods()
     {
         var conflicts = RestConflicts.For(_request.Catalog);
@@ -111,6 +116,14 @@ internal sealed class ScheduleModel
             {
                 foreach (var (offset, prevShift, nextShift) in conflicts)
                 {
+                    var followingDate = date.AddDays(offset);
+                    if (followingDate > Horizon.End
+                        && _following.Contains((employee.Id, followingDate, nextShift))
+                        && _x.TryGetValue((employee.Id, date, prevShift), out var beforeFollowing))
+                    {
+                        Model.AddLinearConstraint(beforeFollowing, 0, 0);
+                    }
+
                     if (!_x.TryGetValue((employee.Id, date, nextShift), out var next))
                     {
                         continue;
@@ -137,7 +150,7 @@ internal sealed class ScheduleModel
     {
         foreach (var monday in Horizon.WeekStarts())
         {
-            var unknownDays = Math.Max(0, monday.AddDays(6).DayNumber - Horizon.End.DayNumber);
+            var unknownDays = Math.Max(0, monday.AddDays(6).DayNumber - KnownUntil.DayNumber);
             var knownDays = Enumerable.Range(0, 7 - unknownDays).Select(monday.AddDays).ToList();
             var requiredOff = Math.Max(0, WeeklyDaysOffRule.RequiredDaysOff - unknownDays);
 
@@ -163,7 +176,7 @@ internal sealed class ScheduleModel
     private void AddConsecutiveDays()
     {
         const int window = ConsecutiveDaysRule.MaxConsecutiveDays + 1;
-        for (var start = Horizon.Start.AddDays(1 - window); start.AddDays(window - 1) <= Horizon.End; start = start.AddDays(1))
+        for (var start = Horizon.Start.AddDays(1 - window); start <= Horizon.End && start.AddDays(window - 1) <= KnownUntil; start = start.AddDays(1))
         {
             foreach (var employee in _request.Employees)
             {
@@ -303,7 +316,7 @@ internal sealed class ScheduleModel
         return count;
     }
 
-    /// <summary>某人某天是否上班（0/1）。Horizon 之前用上下文常數。</summary>
+    /// <summary>某人某天是否上班（0/1）。Horizon 之前、之後用前後上下文的常數。</summary>
     private LinearExpr WorkOn(int employeeId, DateOnly date)
     {
         var expr = LinearExpr.NewBuilder();
@@ -320,6 +333,11 @@ internal sealed class ScheduleModel
         if (date < Horizon.Start)
         {
             return LinearExpr.Constant(_context.Contains((employeeId, date, shift)) ? 1 : 0);
+        }
+
+        if (date > Horizon.End)
+        {
+            return LinearExpr.Constant(_following.Contains((employeeId, date, shift)) ? 1 : 0);
         }
 
         return _x.TryGetValue((employeeId, date, shift), out var x) ? x : LinearExpr.Constant(0);

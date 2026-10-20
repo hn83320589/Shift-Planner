@@ -16,6 +16,9 @@ public sealed record RescheduleRequest
 
     public IReadOnlyList<Assignment> PreviousMonth { get; init; } = [];
 
+    /// <summary>已發布的下個月；重排時視為常數，避免月底的更動和下個月衝突。</summary>
+    public FollowingContext? NextMonth { get; init; }
+
     /// <summary>所有請假，須包含這次新登記的請假。</summary>
     public IReadOnlyList<Leave> Leaves { get; init; } = [];
 
@@ -33,7 +36,7 @@ public sealed record RescheduleResult(
 }
 
 /// <summary>
-/// 臨時重排：FromDate 之前的班次（與前月）全部凍結為常數，只重解 FromDate 到月底；
+/// 臨時重排：FromDate 之前的班次（與前月）、已發布的下個月全部視為常數，只重解 FromDate 到月底；
 /// 目標函數以「與原班表不同的格子數」為主要成本，讓其他人的班盡量不動。
 /// </summary>
 public sealed class Rescheduler(ShiftScheduleGenerator generator)
@@ -54,6 +57,7 @@ public sealed class Rescheduler(ShiftScheduleGenerator generator)
             Employees = request.Employees,
             Calendar = request.Calendar,
             Context = [.. request.PreviousMonth, .. frozen],
+            Following = request.NextMonth,
             Leaves = request.Leaves,
             Preferences = request.Preferences,
             FairnessPeriod = request.Month,

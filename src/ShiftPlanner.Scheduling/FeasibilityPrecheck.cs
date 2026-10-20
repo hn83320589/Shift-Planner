@@ -5,7 +5,7 @@ namespace ShiftPlanner.Scheduling;
 
 /// <summary>
 /// 不需要求解器的靜態檢查，能直接指出「哪一天哪一班需要幾人、只有幾人可排」。
-/// 可排 = 可上該班別、當天未請假、且不會與前月上下文違反休息規定。
+/// 可排 = 可上該班別、當天未請假、且不會與前後月份的上下文違反休息規定。
 /// </summary>
 internal static class FeasibilityPrecheck
 {
@@ -21,12 +21,17 @@ internal static class FeasibilityPrecheck
     {
         var leaves = request.Leaves.ToLookup(l => l.EmployeeId);
         var context = request.Context.Select(a => (a.EmployeeId, a.Date, a.Shift)).ToHashSet();
+        var following = (request.Following?.Assignments ?? []).Select(a => (a.EmployeeId, a.Date, a.Shift)).ToHashSet();
         var conflicts = RestConflicts.For(request.Catalog);
 
         bool BlockedByContext(int employeeId, DateOnly date, ShiftType shift) =>
-            conflicts.Any(c => c.Next == shift
-                && date.AddDays(-c.Offset) < request.Horizon.Start
-                && context.Contains((employeeId, date.AddDays(-c.Offset), c.Prev)));
+            conflicts.Any(c =>
+                (c.Next == shift
+                    && date.AddDays(-c.Offset) < request.Horizon.Start
+                    && context.Contains((employeeId, date.AddDays(-c.Offset), c.Prev)))
+                || (c.Prev == shift
+                    && date.AddDays(c.Offset) > request.Horizon.End
+                    && following.Contains((employeeId, date.AddDays(c.Offset), c.Next))));
 
         foreach (var date in request.Horizon.Days())
         {
