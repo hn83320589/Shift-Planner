@@ -35,9 +35,27 @@ public class MonthlyReportCsvTests
 
         var row = report.Rows[0];
         Assert.Equal(
-            $"1,王小明,全職,2,{ReportFormat.Hours(row.TotalHours)},1,1,0/1,1/1,{ReportFormat.Percent(row.PreferenceSatisfaction)}",
+            $"1,王小明,全職,2,{ReportFormat.Hours(row.TotalHours)},1,1,0,1,1,1,{ReportFormat.Percent(row.PreferenceSatisfaction)}",
             lines[1]);
-        Assert.Equal("1,王小明,全職,2,16,1,1,0/1,1/1,50.0", lines[1]);
+        Assert.Equal("1,王小明,全職,2,16,1,1,0,1,1,1,50.0", lines[1]);
+    }
+
+    // Excel 會把 2/2、1/2 這類欄位自動轉成日期，因此除了姓名與合約類型，每個欄位都必須是純數字或空白。
+    [Fact]
+    public void 數值欄位都是純數字_Excel不會誤判成日期()
+    {
+        var lines = Encoding.UTF8.GetString(MonthlyReportCsv.Write(SampleReport())[3..])
+            .Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        var textColumns = new[] { "姓名", "合約類型" };
+        var numericColumns = MonthlyReportCsv.Headers.Select((h, i) => (h, i)).Where(x => !textColumns.Contains(x.h)).Select(x => x.i).ToList();
+
+        foreach (var line in lines.Skip(1).Where(l => !l.Contains('"')))
+        {
+            var fields = line.Split(',');
+            Assert.All(numericColumns, i => Assert.True(
+                fields[i] == "" || decimal.TryParse(fields[i], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out _),
+                $"{MonthlyReportCsv.Headers[i]} = {fields[i]}"));
+        }
     }
 
     [Fact]
@@ -45,7 +63,7 @@ public class MonthlyReportCsvTests
     {
         var lines = Encoding.UTF8.GetString(MonthlyReportCsv.Write(SampleReport())[3..]).Split("\r\n");
 
-        Assert.StartsWith("2,\"Lin, \"\"Amy\"\"\",兼職,1,8,0,0,,,", lines[2]);
+        Assert.Equal("2,\"Lin, \"\"Amy\"\"\",兼職,1,8,0,0,0,0,0,0,", lines[2]);
         Assert.Equal("", lines[^1]); // 以 CRLF 結尾
     }
 }

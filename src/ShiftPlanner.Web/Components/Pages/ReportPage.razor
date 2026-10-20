@@ -62,16 +62,10 @@ else
             @foreach (var row in _report.Rows)
             {
                 <tr>
-                    <td>@row.EmployeeId</td>
-                    <td>@row.Name</td>
-                    <td>@row.ContractType.ToDisplayName()</td>
-                    <td class="num">@row.Shifts</td>
-                    <td class="num">@ReportFormat.Hours(row.TotalHours)</td>
-                    <td class="num">@row.NightShifts</td>
-                    <td class="num">@row.WeekendShifts</td>
-                    <td class="num">@ReportFormat.Fraction(row.StrongSatisfied, row.StrongRequested)</td>
-                    <td class="num">@ReportFormat.Fraction(row.NormalSatisfied, row.NormalRequested)</td>
-                    <td class="num">@ReportFormat.Percent(row.PreferenceSatisfaction)</td>
+                    @foreach (var (cell, index) in ShiftPlanner.Core.Export.MonthlyReportCsv.Cells(row).Select((c, i) => (c, i)))
+                    {
+                        <td class="@(index is 1 or 2 ? "" : "num")">@cell</td>
+                    }
                     <td>
                         @if (_published)
                         {

@@ -12,6 +12,4 @@ public static class ReportFormat
     /// <summary>百分比數值（不含 % 符號），沒有資料時為空字串。</summary>
     public static string Percent(double? ratio) =>
         ratio is { } r ? (r * 100).ToString("0.0", CultureInfo.InvariantCulture) : "";
-
-    public static string Fraction(int satisfied, int requested) => requested == 0 ? "" : $"{satisfied}/{requested}";
 }

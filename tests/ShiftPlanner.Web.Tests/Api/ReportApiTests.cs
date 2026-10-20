@@ -31,7 +31,11 @@ public class ReportApiTests
             Assert.Equal(ReportFormat.Hours(row.TotalHours), fields[4]);
             Assert.Equal(row.NightShifts.ToString(), fields[5]);
             Assert.Equal(row.WeekendShifts.ToString(), fields[6]);
-            Assert.Equal(ReportFormat.Percent(row.PreferenceSatisfaction), fields[9]);
+            Assert.Equal(row.StrongSatisfied.ToString(), fields[7]);
+            Assert.Equal(row.StrongRequested.ToString(), fields[8]);
+            Assert.Equal(row.NormalSatisfied.ToString(), fields[9]);
+            Assert.Equal(row.NormalRequested.ToString(), fields[10]);
+            Assert.Equal(ReportFormat.Percent(row.PreferenceSatisfaction), fields[11]);
         }
     }
 
