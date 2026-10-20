@@ -43,7 +43,7 @@ public sealed class GeneratedNovemberFixture
 {
     public GeneratedNovemberFixture()
     {
-        var generator = new ShiftScheduleGenerator();
+        var generator = new ShiftScheduleGenerator(TimeProvider.System);
         OctoberResult = generator.Generate(SampleScenario.OctoberRequest());
         NovemberRequest = SampleScenario.NovemberRequest(OctoberResult.Assignments);
         NovemberResult = generator.Generate(NovemberRequest);

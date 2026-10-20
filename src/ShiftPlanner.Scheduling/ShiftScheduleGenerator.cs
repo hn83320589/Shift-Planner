@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 
 using Google.OrTools.Sat;
@@ -7,18 +6,21 @@ using ShiftPlanner.Core.Validation;
 
 namespace ShiftPlanner.Scheduling;
 
-/// <summary>以 OR-Tools CP-SAT 產生班表。產生後一定以獨立的 validator 再檢查一次。</summary>
-public sealed class ShiftScheduleGenerator
+/// <summary>
+/// 以 OR-Tools CP-SAT 產生班表。產生後一定以獨立的 validator 再檢查一次。
+/// 回報的耗時經由注入的 TimeProvider 計算；CP-SAT 內部的時間上限則由原生程式庫自行計時。
+/// </summary>
+public sealed class ShiftScheduleGenerator(TimeProvider time)
 {
     private readonly ScheduleValidator _validator = new();
 
     public GenerationResult Generate(GenerationRequest request)
     {
-        var stopwatch = Stopwatch.StartNew();
+        var started = time.GetTimestamp();
         var precheck = FeasibilityPrecheck.Check(request);
         if (precheck.Count > 0)
         {
-            return new GenerationResult(GenerationStatus.Infeasible, [], precheck, stopwatch.Elapsed);
+            return new GenerationResult(GenerationStatus.Infeasible, [], precheck, time.GetElapsedTime(started));
         }
 
         var model = new ScheduleModel(request);
@@ -32,16 +34,16 @@ public sealed class ShiftScheduleGenerator
                 EnsureValid(request, assignments);
                 return new GenerationResult(
                     status == CpSolverStatus.Optimal ? GenerationStatus.Optimal : GenerationStatus.Feasible,
-                    assignments, [], stopwatch.Elapsed);
+                    assignments, [], time.GetElapsedTime(started));
 
             case CpSolverStatus.Infeasible:
                 var reasons = InfeasibilityDiagnoser.Diagnose(request, () => CreateSolver(request));
-                return new GenerationResult(GenerationStatus.Infeasible, [], reasons, stopwatch.Elapsed);
+                return new GenerationResult(GenerationStatus.Infeasible, [], reasons, time.GetElapsedTime(started));
 
             case CpSolverStatus.Unknown:
                 return new GenerationResult(GenerationStatus.TimedOut, [],
                     [new InfeasibilityReason(null, null, 0, 0, $"{request.TimeLimit.TotalSeconds:0} 秒內找不到可行解，也無法證明無解")],
-                    stopwatch.Elapsed);
+                    time.GetElapsedTime(started));
 
             default:
                 throw new InvalidOperationException($"CP-SAT 回傳非預期狀態 {status}：{solver.SolutionInfo()}");

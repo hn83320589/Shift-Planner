@@ -63,7 +63,7 @@ public class ShiftScheduleGeneratorTests(GeneratedNovemberFixture fixture, ITest
             Leaves = [new Leave(1, new DateOnly(2026, 11, 2), new DateOnly(2026, 11, 6))],
         };
 
-        var result = new ShiftScheduleGenerator().Generate(request);
+        var result = new ShiftScheduleGenerator(TimeProvider.System).Generate(request);
 
         Assert.True(result.Succeeded);
         Assert.DoesNotContain(result.Assignments, a => a.EmployeeId == 1 && a.Date.Day is >= 2 and <= 6);

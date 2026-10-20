@@ -10,7 +10,7 @@ public class ReschedulerTests(GeneratedNovemberFixture fixture, ITestOutputHelpe
     private static readonly DateOnly LeaveStart = new(2026, 11, 16);
     private static readonly DateOnly LeaveEnd = new(2026, 11, 20);
 
-    private readonly Rescheduler _rescheduler = new(new ShiftScheduleGenerator());
+    private readonly Rescheduler _rescheduler = new(new ShiftScheduleGenerator(TimeProvider.System));
 
     /// <summary>11/16～11/20 上最多班的人臨時請 5 天假。</summary>
     private (int EmployeeId, RescheduleRequest Request) ScenarioWithLeave()

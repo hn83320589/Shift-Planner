@@ -8,7 +8,7 @@ public class InfeasibilityDiagnosisTests(GeneratedNovemberFixture fixture) : ICl
 {
     private static readonly DateOnly Nov14 = new(2026, 11, 14);
 
-    private readonly ShiftScheduleGenerator _generator = new();
+    private readonly ShiftScheduleGenerator _generator = new(TimeProvider.System);
 
     [Fact]
     public void 夜班需求超過可排人數_原因包含日期班別需要人數與可用人數()
