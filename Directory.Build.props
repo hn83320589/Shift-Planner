@@ -1,0 +1,8 @@
+<Project>
+  <!-- 全方案共用設定：警告視為錯誤，並在建置時套用 .editorconfig 的程式碼風格規則 -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+</Project>
