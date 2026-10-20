@@ -1,0 +1,465 @@
+@page "/schedule"
+@page "/schedule/{Year:int}/{Month:int}"
+@rendermode InteractiveServer
+@inject ScopedRunner Runner
+@inject TimeProvider Time
+
+<PageTitle>@Year/@Month 月班表</PageTitle>
+
+<div class="page-head">
+    <MonthNav BasePath="/schedule" Year="Year" Month="Month" />
+
+    @if (_state is not null)
+    {
+        <span class="badge @StatusClass">@StatusText</span>
+        @if (!_state.IsPublished)
+        {
+            <div class="actions">
+                @if (_confirmGenerate)
+                {
+                    <span class="warn-text">重新產生會覆蓋目前草稿</span>
+                    <button class="btn" @onclick="GenerateAsync" disabled="@_busy">確定產生</button>
+                    <button class="btn ghost" @onclick="() => _confirmGenerate = false">取消</button>
+                }
+                else
+                {
+                    <button class="btn" @onclick="RequestGenerate" disabled="@_busy">@(_busy ? "產生中…" : "自動產生班表")</button>
+                }
+                <button class="btn primary" @onclick="PublishAsync" disabled="@(_busy || !_state.Validation.CanPublish || _state.Assignments.Count == 0)"
+                        title="@(_state.Validation.CanPublish ? "發布班表" : "仍有違規或人力缺口，無法發布")">
+                    發布
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="actions">
+                <a class="btn" href="/reschedule/@Year/@Month">臨時重排</a>
+            </div>
+        }
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert error" role="alert">@_error</div>
+}
+@if (_notice is not null)
+{
+    <div class="alert ok" role="status">@_notice</div>
+}
+@if (_reasons.Count > 0)
+{
+    <div class="alert error" role="alert">
+        <strong>找不到可行的班表，原因：</strong>
+        <ul>
+            @foreach (var reason in _reasons)
+            {
+                <li>@reason.Message</li>
+            }
+        </ul>
+    </div>
+}
+
+@if (_state is null)
+{
+    <p class="muted">載入中…</p>
+}
+else
+{
+    @if (_state.IsPublished)
+    {
+        <div class="alert info">
+            此班表已於 @_state.PublishedAt?.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy/MM/dd HH:mm") 發布（第 @_state.Revision 版），不可直接修改。
+            員工臨時請假請使用<a href="/reschedule/@Year/@Month">臨時重排</a>。
+        </div>
+    }
+    else if (_state.Assignments.Count == 0)
+    {
+        <div class="alert info">這個月還沒有班表，請按「自動產生班表」。</div>
+    }
+
+    <div class="summary-bar">
+        <span class="@(_state.Validation.Violations.Count > 0 ? "count bad" : "count good")">硬性違規 @_state.Validation.Violations.Count</span>
+        <span class="@(_state.Validation.Gaps.Count > 0 ? "count bad" : "count good")">人力缺口 @_state.Validation.Gaps.Count</span>
+        @if (!_state.IsPublished && _savedAt is not null)
+        {
+            <span class="muted">草稿已自動儲存 @_savedAt</span>
+        }
+        <span class="legend">
+            <span class="chip early">早</span>07–15
+            <span class="chip late">晚</span>15–23
+            <span class="chip night">夜</span>23–07
+            <span class="pref strong">★</span>強烈希望休
+            <span class="pref">☆</span>一般希望休
+            <span class="leave">假</span>請假
+        </span>
+    </div>
+
+    <div class="schedule-layout">
+        <div class="grid-wrap">
+            <table class="roster">
+                <thead>
+                    <tr>
+                        <th class="sticky-col">員工</th>
+                        @foreach (var day in _days)
+                        {
+                            <th class="@DayClass(day)" title="@_state.Data.Calendar.GetHolidayName(day)">
+                                <div>@day.Day</div>
+                                <div class="weekday">@Format.Weekday(day)</div>
+                            </th>
+                        }
+                        <th>工時</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var employee in _state.Data.Employees)
+                    {
+                        <tr>
+                            <th class="sticky-col employee">
+                                <div>@employee.Name</div>
+                                <div class="meta">@employee.ContractType.ToDisplayName() · @SkillText(employee)</div>
+                            </th>
+                            @foreach (var day in _days)
+                            {
+                                var key = (employee.Id, day);
+                                <td class="cell @DayClass(day) @CellClass(key)" @onclick="() => Select(employee.Id, day)"
+                                    title="@CellTitle(key)">
+                                    @if (_leaves.Contains(key))
+                                    {
+                                        <span class="leave">假</span>
+                                    }
+                                    @foreach (var shift in Shifts(key))
+                                    {
+                                        <span class="chip @shift.CssClass()">@shift.ShortName()</span>
+                                    }
+                                    @if (_preferences.TryGetValue(key, out var priority))
+                                    {
+                                        <span class="pref @(priority == PreferencePriority.Strong ? "strong" : "")">@(priority == PreferencePriority.Strong ? "★" : "☆")</span>
+                                    }
+                                </td>
+                            }
+                            <td class="hours">@(_assignments.Where(kv => kv.Key.EmployeeId == employee.Id).Sum(kv => kv.Value.Count) * 8)</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    @foreach (var shift in DisplayNames.AllShifts)
+                    {
+                        <tr>
+                            <th class="sticky-col">@shift.ToDisplayName() 人數</th>
+                            @foreach (var day in _days)
+                            {
+                                var gaps = _gaps.GetValueOrDefault((day, shift)) ?? [];
+                                var staffed = _assignments.Count(kv => kv.Key.Date == day && kv.Value.Contains(shift));
+                                <td class="coverage @(gaps.Count > 0 ? "gap" : "")" title="@string.Join("\n", gaps.Select(g => g.Message))">
+                                    @staffed/@_state.Data.Calendar.GetMinStaff(day, shift)
+                                    @foreach (var gap in gaps.Where(g => g.Skill is not null))
+                                    {
+                                        <div class="skill-gap">缺@(gap.Skill!.Value.ToDisplayName()[..1])</div>
+                                    }
+                                </td>
+                            }
+                            <td></td>
+                        </tr>
+                    }
+                </tfoot>
+            </table>
+        </div>
+
+        <aside class="side-panel">
+            @if (_selected is { } selected)
+            {
+                var employee = _state.Data.Employees.Single(e => e.Id == selected.EmployeeId);
+                var current = Shifts(selected).ToList();
+                <section class="editor">
+                    <header>
+                        <strong>@employee.Name</strong> @Format.DateWithWeekday(selected.Date)
+                        <button class="link" @onclick="() => _selected = null" aria-label="關閉">✕</button>
+                    </header>
+                    <p class="muted">
+                        可上：@string.Join("、", DisplayNames.AllShifts.Where(employee.CanWork).Select(s => s.ToDisplayName()))
+                        @if (_preferences.TryGetValue(selected, out var p))
+                        {
+                            <span> · @p.ToDisplayName()希望休假</span>
+                        }
+                    </p>
+
+                    @if (_state.IsPublished)
+                    {
+                        <p>目前：@(current.Count == 0 ? "休" : string.Join("、", current.Select(s => s.ToDisplayName())))</p>
+                        <p class="muted">已發布的班表不可直接修改。</p>
+                    }
+                    else
+                    {
+                        <div class="field">
+                            <label>目前</label>
+                            <div>
+                                @if (current.Count == 0)
+                                {
+                                    <span class="muted">休</span>
+                                }
+                                @foreach (var shift in current)
+                                {
+                                    <span class="chip @shift.CssClass()">
+                                        @shift.ToDisplayName()
+                                        <button class="chip-x" @onclick="() => RemoveAsync(new Assignment(selected.EmployeeId, selected.Date, shift))"
+                                                aria-label="刪除@(shift.ToDisplayName())">✕</button>
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>換成</label>
+                            <div class="button-row">
+                                @foreach (var shift in DisplayNames.AllShifts)
+                                {
+                                    <button class="btn small" disabled="@_busy" @onclick="() => SetShiftAsync(shift)">@shift.ToDisplayName()</button>
+                                }
+                                <button class="btn small ghost" disabled="@_busy" @onclick="() => SetShiftAsync(null)">休</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>加班（再加一班）</label>
+                            <div class="button-row">
+                                @foreach (var shift in DisplayNames.AllShifts)
+                                {
+                                    <button class="btn small ghost" disabled="@(_busy || current.Contains(shift))"
+                                            @onclick="() => AddAsync(new Assignment(selected.EmployeeId, selected.Date, shift))">+@shift.ShortName()</button>
+                                }
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>與同事交換當天的班</label>
+                            <div class="button-row">
+                                <select @bind="_swapWith">
+                                    <option value="0">選擇同事</option>
+                                    @foreach (var other in _state.Data.Employees.Where(e => e.Id != selected.EmployeeId))
+                                    {
+                                        var theirs = Shifts((other.Id, selected.Date)).ToList();
+                                        <option value="@other.Id">@other.Name（@(theirs.Count == 0 ? "休" : string.Join("、", theirs.Select(s => s.ShortName())))）</option>
+                                    }
+                                </select>
+                                <button class="btn small" disabled="@(_busy || _swapWith == 0)" @onclick="SwapAsync">交換</button>
+                            </div>
+                        </div>
+                    }
+
+                    @if (_violations.TryGetValue(selected, out var cellViolations))
+                    {
+                        <ul class="issues">
+                            @foreach (var v in cellViolations)
+                            {
+                                <li class="violation">@v.Code.ToDisplayName()：@v.Message</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+
+            <section class="issue-list">
+                <h2>硬性違規（@_state.Validation.Violations.Count）</h2>
+                @if (_state.Validation.Violations.Count == 0)
+                {
+                    <p class="muted">沒有違規</p>
+                }
+                <ul class="issues">
+                    @foreach (var v in _state.Validation.Violations)
+                    {
+                        <li class="violation" @onclick="() => Select(v.EmployeeId, v.Date)">
+                            <span class="tag">@v.Code.ToDisplayName()</span> @v.Message
+                        </li>
+                    }
+                </ul>
+                <h2>人力缺口（@_state.Validation.Gaps.Count）</h2>
+                @if (_state.Validation.Gaps.Count == 0)
+                {
+                    <p class="muted">每班人數與語言需求都已滿足</p>
+                }
+                <ul class="issues">
+                    @foreach (var g in _state.Validation.Gaps)
+                    {
+                        <li class="gap">@g.Message</li>
+                    }
+                </ul>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter] public int Year { get; set; }
+    [Parameter] public int Month { get; set; }
+
+    private ScheduleState? _state;
+    private List<DateOnly> _days = [];
+    private Dictionary<(int EmployeeId, DateOnly Date), List<ShiftType>> _assignments = [];
+    private Dictionary<(int EmployeeId, DateOnly Date), List<Violation>> _violations = [];
+    private Dictionary<(DateOnly Date, ShiftType Shift), List<CoverageGap>> _gaps = [];
+    private Dictionary<(int EmployeeId, DateOnly Date), PreferencePriority> _preferences = [];
+    private HashSet<(int EmployeeId, DateOnly Date)> _leaves = [];
+    private (int EmployeeId, DateOnly Date)? _selected;
+    private IReadOnlyList<InfeasibilityReason> _reasons = [];
+    private string? _error;
+    private string? _notice;
+    private string? _savedAt;
+    private int _swapWith;
+    private bool _busy;
+    private bool _confirmGenerate;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Year == 0)
+        {
+            (Year, Month) = PlanningMonth.Default(Time);
+        }
+
+        _selected = null;
+        _reasons = [];
+        _error = _notice = _savedAt = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _state = await Runner.RunAsync<ScheduleService, ScheduleState>(s => s.GetStateAsync(Year, Month));
+        _days = _state.Data.Period.Days().ToList();
+        _assignments = _state.Assignments.GroupBy(a => (a.EmployeeId, a.Date))
+            .ToDictionary(g => g.Key, g => g.Select(a => a.Shift).Order().ToList());
+        _violations = _state.Validation.Violations.GroupBy(v => (v.EmployeeId, v.Date))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        _gaps = _state.Validation.Gaps.GroupBy(g => (g.Date, g.Shift)).ToDictionary(g => g.Key, g => g.ToList());
+        _preferences = _state.Data.Preferences.ToDictionary(p => (p.EmployeeId, p.Date), p => p.Priority);
+        _leaves = _state.Data.Leaves
+            .SelectMany(l => _days.Where(l.Contains).Select(d => (l.EmployeeId, d)))
+            .ToHashSet();
+    }
+
+    private void Select(int employeeId, DateOnly date)
+    {
+        _selected = (employeeId, date);
+        _swapWith = 0;
+    }
+
+    private async Task RequestGenerate()
+    {
+        if (_state!.Assignments.Count > 0)
+        {
+            _confirmGenerate = true;
+            return;
+        }
+
+        await GenerateAsync();
+    }
+
+    private Task GenerateAsync() => ExecuteAsync(async () =>
+    {
+        _confirmGenerate = false;
+        var result = await Runner.RunAsync<ScheduleService, GenerationResult>(s => s.GenerateDraftAsync(Year, Month));
+        _reasons = result.Succeeded ? [] : result.Reasons;
+        _notice = result.Succeeded
+            ? $"已產生草稿（{(result.Status == GenerationStatus.Optimal ? "最佳解" : "可行解")}，{result.Elapsed.TotalSeconds:0.0} 秒，{result.Assignments.Count} 班）"
+            : null;
+    }, markSaved: false);
+
+    private Task PublishAsync() => ExecuteAsync(async () =>
+    {
+        await Runner.RunAsync<ScheduleService>(s => s.PublishAsync(Year, Month));
+        _notice = "班表已發布";
+    }, markSaved: false);
+
+    private Task AddAsync(Assignment assignment) =>
+        ExecuteAsync(() => Runner.RunAsync<ScheduleService>(s => s.AddAsync(Year, Month, assignment)));
+
+    private Task RemoveAsync(Assignment assignment) =>
+        ExecuteAsync(() => Runner.RunAsync<ScheduleService>(s => s.RemoveAsync(Year, Month, assignment)));
+
+    private Task SwapAsync()
+    {
+        var (employeeId, date) = _selected!.Value;
+        var other = _swapWith;
+        return ExecuteAsync(() => Runner.RunAsync<ScheduleService>(s => s.SwapAsync(Year, Month, date, employeeId, other)));
+    }
+
+    /// <summary>把選取格子改成指定班別（null = 休）；原本有多班時全部換掉。</summary>
+    private Task SetShiftAsync(ShiftType? target)
+    {
+        var (employeeId, date) = _selected!.Value;
+        var current = Shifts((employeeId, date)).ToList();
+        return ExecuteAsync(() => Runner.RunAsync<ScheduleService>(async s =>
+        {
+            var keep = target is { } t && current.Contains(t);
+            foreach (var shift in current.Where(c => c != target))
+            {
+                if (target is { } replacement && !keep)
+                {
+                    await s.ReplaceAsync(Year, Month, new Assignment(employeeId, date, shift), new Assignment(employeeId, date, replacement));
+                    keep = true;
+                }
+                else
+                {
+                    await s.RemoveAsync(Year, Month, new Assignment(employeeId, date, shift));
+                }
+            }
+
+            if (target is { } added && !keep)
+            {
+                await s.AddAsync(Year, Month, new Assignment(employeeId, date, added));
+            }
+        }));
+    }
+
+    /// <summary>執行操作後重新載入並驗證；可預期的業務錯誤顯示在畫面上，其他例外照常拋出。</summary>
+    private async Task ExecuteAsync(Func<Task> action, bool markSaved = true)
+    {
+        _busy = true;
+        _error = null;
+        _notice = null;
+        try
+        {
+            await action();
+            if (markSaved)
+            {
+                _savedAt = TimeZoneInfo.ConvertTime(Time.GetUtcNow(), TaipeiTime.Zone).ToString("HH:mm:ss");
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private IEnumerable<ShiftType> Shifts((int EmployeeId, DateOnly Date) key) =>
+        _assignments.TryGetValue(key, out var shifts) ? shifts : [];
+
+    private string CellClass((int EmployeeId, DateOnly Date) key) => string.Join(" ",
+        _violations.ContainsKey(key) ? "has-violation" : "",
+        _selected == key ? "selected" : "",
+        _preferences.TryGetValue(key, out var p) && p == PreferencePriority.Strong && _assignments.ContainsKey(key) ? "pref-broken" : "");
+
+    private string? CellTitle((int EmployeeId, DateOnly Date) key) =>
+        _violations.TryGetValue(key, out var list) ? string.Join("\n", list.Select(v => v.Message)) : null;
+
+    private string DayClass(DateOnly day) =>
+        _state!.Data.Calendar.GetDayType(day) == DayType.Holiday ? (day.IsWeekend() ? "weekend" : "holiday") : "";
+
+    private static string SkillText(Employee employee) =>
+        string.Join("", new[] { Skills.English, Skills.Japanese }.Where(employee.HasSkill).Select(s => s.ToDisplayName()[..1])) is { Length: > 0 } text
+            ? text
+            : "中";
+
+    private string StatusText => _state switch
+    {
+        { IsPublished: true } s => $"已發布 · 第 {s.Revision} 版",
+        { Exists: true } => "草稿",
+        _ => "尚未建立",
+    };
+
+    private string StatusClass => _state is { IsPublished: true } ? "published" : "draft";
+}

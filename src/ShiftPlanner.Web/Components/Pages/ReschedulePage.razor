@@ -1,0 +1,187 @@
+@page "/reschedule"
+@page "/reschedule/{Year:int}/{Month:int}"
+@rendermode InteractiveServer
+@inject ScopedRunner Runner
+@inject TimeProvider Time
+
+<PageTitle>@Year/@Month 臨時重排</PageTitle>
+
+<div class="page-head">
+    <MonthNav BasePath="/reschedule" Year="Year" Month="Month" />
+    <a class="btn ghost" href="/schedule/@Year/@Month">回到月班表</a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert error" role="alert">@_error</div>
+}
+
+@if (_state is null)
+{
+    <p class="muted">載入中…</p>
+}
+else if (!_state.IsPublished)
+{
+    <div class="alert info">@Year/@Month 班表尚未發布。草稿可以直接在<a href="/schedule/@Year/@Month">月班表</a>修改，不需要臨時重排。</div>
+}
+else
+{
+    <p class="muted">
+        目前為第 @_state.Revision 版。登記請假後，系統只會重排請假開始日（含）之後的班，之前的班次完全不動；
+        會盡量少更動其他人，並列出所有變更，確認後才套用。
+    </p>
+
+    <section class="form-card">
+        <div class="field">
+            <label for="employee">請假員工</label>
+            <select id="employee" @bind="_employeeId">
+                <option value="0">選擇員工</option>
+                @foreach (var e in _state.Data.Employees)
+                {
+                    <option value="@e.Id">@e.Name</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label for="start">請假開始</label>
+            <input id="start" type="date" @bind="_start" min="@_state.Data.Period.Start.ToString("yyyy-MM-dd")" max="@_state.Data.Period.End.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="field">
+            <label for="end">請假結束</label>
+            <input id="end" type="date" @bind="_end" />
+        </div>
+        <button class="btn primary" disabled="@(_busy || _employeeId == 0)" @onclick="ProposeAsync">@(_busy ? "計算中…" : "產生重排提案")</button>
+    </section>
+
+    @if (_reasons.Count > 0)
+    {
+        <div class="alert error">
+            <strong>找不到可行的重排：</strong>
+            <ul>@foreach (var r in _reasons) { <li>@r.Message</li> }</ul>
+        </div>
+    }
+
+    @if (_proposal is not null)
+    {
+        <section class="proposal">
+            <h2>
+                重排提案 #@_proposal.Id
+                <span class="badge @(_proposal.Status == ProposalStatus.Pending ? "draft" : "published")">@StatusText(_proposal.Status)</span>
+            </h2>
+            <p>
+                @Name(_proposal.EmployeeId) 請假 @Format.DateWithWeekday(_proposal.LeaveStart) ～ @Format.DateWithWeekday(_proposal.LeaveEnd)，
+                共更動 @_proposal.Changes.Count 個班次（移除 @_proposal.Removed.Count()、新增 @_proposal.Added.Count()），
+                牽涉 @_proposal.Changes.Select(c => c.EmployeeId).Distinct().Count() 人。
+            </p>
+            <table class="changes">
+                <thead>
+                    <tr><th>日期</th><th>班別</th><th>移除</th><th>新增</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in _proposal.Changes.GroupBy(c => (c.Date, c.Shift)).OrderBy(g => g.Key.Date).ThenBy(g => g.Key.Shift))
+                    {
+                        <tr>
+                            <td>@Format.DateWithWeekday(group.Key.Date)</td>
+                            <td><span class="chip @group.Key.Shift.CssClass()">@group.Key.Shift.ToDisplayName()</span></td>
+                            <td class="removed">@string.Join("、", group.Where(c => c.Kind == ChangeKind.Removed).Select(c => Name(c.EmployeeId)))</td>
+                            <td class="added">@string.Join("、", group.Where(c => c.Kind == ChangeKind.Added).Select(c => Name(c.EmployeeId)))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (_proposal.Status == ProposalStatus.Pending)
+            {
+                <div class="actions">
+                    <button class="btn primary" disabled="@_busy" @onclick="ApplyAsync">確認套用</button>
+                    <button class="btn ghost" disabled="@_busy" @onclick="DiscardAsync">捨棄</button>
+                </div>
+            }
+            else if (_proposal.Status == ProposalStatus.Applied)
+            {
+                <div class="alert ok">已套用，班表更新為第 @_state.Revision 版。<a href="/schedule/@Year/@Month">查看月班表</a></div>
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public int Year { get; set; }
+    [Parameter] public int Month { get; set; }
+
+    private ScheduleState? _state;
+    private RescheduleProposal? _proposal;
+    private IReadOnlyList<InfeasibilityReason> _reasons = [];
+    private int _employeeId;
+    private DateOnly _start;
+    private DateOnly _end;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Year == 0)
+        {
+            (Year, Month) = PlanningMonth.Default(Time);
+        }
+
+        _proposal = null;
+        _reasons = [];
+        _error = null;
+        await LoadAsync();
+        var today = TaipeiTime.Today(Time);
+        _start = _state!.Data.Period.Contains(today) ? today : _state.Data.Period.Start;
+        _end = _start.AddDays(4);
+    }
+
+    private async Task LoadAsync() =>
+        _state = await Runner.RunAsync<ScheduleService, ScheduleState>(s => s.GetStateAsync(Year, Month));
+
+    private Task ProposeAsync() => ExecuteAsync(async () =>
+    {
+        var outcome = await Runner.RunAsync<RescheduleService, ProposalOutcome>(s => s.ProposeAsync(Year, Month, _employeeId, _start, _end));
+        _proposal = outcome.Proposal;
+        _reasons = outcome.Reasons;
+    });
+
+    private Task ApplyAsync() => ExecuteAsync(async () =>
+    {
+        var id = _proposal!.Id;
+        await Runner.RunAsync<RescheduleService>(s => s.ApplyAsync(id));
+        _proposal = await Runner.RunAsync<RescheduleService, RescheduleProposal?>(s => s.FindAsync(id));
+    });
+
+    private Task DiscardAsync() => ExecuteAsync(async () =>
+    {
+        var id = _proposal!.Id;
+        await Runner.RunAsync<RescheduleService>(s => s.DiscardAsync(id));
+        _proposal = await Runner.RunAsync<RescheduleService, RescheduleProposal?>(s => s.FindAsync(id));
+    });
+
+    private async Task ExecuteAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            await LoadAsync();
+            _busy = false;
+        }
+    }
+
+    private string Name(int employeeId) => _state!.Data.Employees.Single(e => e.Id == employeeId).Name;
+
+    private static string StatusText(ProposalStatus status) => status switch
+    {
+        ProposalStatus.Pending => "待確認",
+        ProposalStatus.Applied => "已套用",
+        _ => "已捨棄",
+    };
+}

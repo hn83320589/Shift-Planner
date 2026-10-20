@@ -1,7 +1,29 @@
-﻿@page "/"
+@page "/"
+@inject TimeProvider Time
 
-<PageTitle>Home</PageTitle>
+<PageTitle>客服中心排班系統</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>客服中心排班系統</h1>
+<p class="muted">今天（台北時間）@TaipeiTime.Today(Time).ToString("yyyy/MM/dd")}，預設規劃月份為 @_year/@_month。</p>
 
-Welcome to your new app.
+<div class="cards">
+    <a class="card-link" href="/schedule/@_year/@_month">
+        <strong>月班表</strong>
+        <span>產生、手動調整、即時檢查違規並發布</span>
+    </a>
+    <a class="card-link" href="/reschedule/@_year/@_month">
+        <strong>臨時重排</strong>
+        <span>已發布月份有人請長假時，只重排受影響的日期</span>
+    </a>
+    <a class="card-link" href="/reports/@_year/@_month">
+        <strong>月報</strong>
+        <span>工時、夜班、週末班、休假偏好滿足率與 CSV 匯出</span>
+    </a>
+</div>
+
+@code {
+    private int _year;
+    private int _month;
+
+    protected override void OnInitialized() => (_year, _month) = PlanningMonth.Default(Time);
+}

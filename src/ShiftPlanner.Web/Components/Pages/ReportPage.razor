@@ -1,0 +1,129 @@
+@page "/reports"
+@page "/reports/{Year:int}/{Month:int}"
+@rendermode InteractiveServer
+@inject ScopedRunner Runner
+@inject TimeProvider Time
+
+<PageTitle>@Year/@Month 月報</PageTitle>
+
+<div class="page-head">
+    <MonthNav BasePath="/reports" Year="Year" Month="Month" />
+    @if (_report is not null)
+    {
+        <a class="btn" href="/api/reports/@Year/@Month/export.csv" download>匯出 CSV</a>
+    }
+</div>
+
+@if (_report is null)
+{
+    <div class="alert info">@Year/@Month 還沒有班表。</div>
+}
+else
+{
+    @if (!_published)
+    {
+        <div class="alert info">此月份班表為草稿，數字會隨調整變動；發布後才能匯出個人行事曆。</div>
+    }
+
+    <div class="metrics">
+        <div class="metric">
+            <span class="label">強烈休假偏好滿足率</span>
+            <span class="value">@Percent(_report.StrongSatisfaction)</span>
+        </div>
+        <div class="metric">
+            <span class="label">一般休假偏好滿足率</span>
+            <span class="value">@Percent(_report.NormalSatisfaction)</span>
+        </div>
+        <div class="metric">
+            <span class="label">全職夜班數標準差</span>
+            <span class="value">@ReportFormat.StdDev(_report.NightShiftStdDev)</span>
+        </div>
+        <div class="metric">
+            <span class="label">全職週末班數標準差</span>
+            <span class="value">@ReportFormat.StdDev(_report.WeekendShiftStdDev)</span>
+        </div>
+        <div class="metric">
+            <span class="label">全職夜班數差距（最多−最少）</span>
+            <span class="value">@_report.NightShiftSpread</span>
+        </div>
+    </div>
+
+    <table class="report">
+        <thead>
+            <tr>
+                @foreach (var header in ShiftPlanner.Core.Export.MonthlyReportCsv.Headers)
+                {
+                    <th>@header</th>
+                }
+                <th>個人行事曆</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _report.Rows)
+            {
+                <tr>
+                    <td>@row.EmployeeId</td>
+                    <td>@row.Name</td>
+                    <td>@row.ContractType.ToDisplayName()</td>
+                    <td class="num">@row.Shifts</td>
+                    <td class="num">@ReportFormat.Hours(row.TotalHours)</td>
+                    <td class="num">@row.NightShifts</td>
+                    <td class="num">@row.WeekendShifts</td>
+                    <td class="num">@ReportFormat.Fraction(row.StrongSatisfied, row.StrongRequested)</td>
+                    <td class="num">@ReportFormat.Fraction(row.NormalSatisfied, row.NormalRequested)</td>
+                    <td class="num">@ReportFormat.Percent(row.PreferenceSatisfaction)</td>
+                    <td>
+                        @if (_published)
+                        {
+                            <a href="/api/employees/@row.EmployeeId/schedules/@Year/@Month/calendar.ics" download>.ics</a>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h2>未滿足的休假偏好（@_report.Unsatisfied.Count）</h2>
+    @if (_report.Unsatisfied.Count == 0)
+    {
+        <p class="muted">所有休假偏好都已滿足。</p>
+    }
+    else
+    {
+        <table class="report compact">
+            <thead><tr><th>優先級</th><th>員工</th><th>日期</th><th>當天排班</th></tr></thead>
+            <tbody>
+                @foreach (var u in _report.Unsatisfied)
+                {
+                    <tr class="@(u.Priority == PreferencePriority.Strong ? "strong-row" : "")">
+                        <td>@u.Priority.ToDisplayName()</td>
+                        <td>@u.Name</td>
+                        <td>@Format.DateWithWeekday(u.Date)</td>
+                        <td><span class="chip @u.AssignedShift.CssClass()">@u.AssignedShift.ToDisplayName()</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public int Year { get; set; }
+    [Parameter] public int Month { get; set; }
+
+    private MonthlyReport? _report;
+    private bool _published;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Year == 0)
+        {
+            (Year, Month) = PlanningMonth.Default(Time);
+        }
+
+        (_report, _published) = await Runner.RunAsync<ReportService, (MonthlyReport?, bool)>(async s =>
+            (await s.GetMonthlyReportAsync(Year, Month), (await s.IsPublishedAsync(Year, Month))));
+    }
+
+    private static string Percent(double? ratio) => ratio is null ? "—" : $"{ReportFormat.Percent(ratio)}%";
+}

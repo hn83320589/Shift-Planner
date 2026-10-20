@@ -23,6 +23,7 @@ builder.Services.AddSingleton<Rescheduler>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<RescheduleService>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddSingleton<ScopedRunner>();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddDbContext<ShiftPlannerDbContext>(options =>

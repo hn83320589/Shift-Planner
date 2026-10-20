@@ -15,6 +15,9 @@ public sealed class ReportService(ScheduleService schedules, TimeProvider time)
             : null;
     }
 
+    public async Task<bool> IsPublishedAsync(int year, int month, CancellationToken cancellationToken = default) =>
+        (await schedules.GetStateAsync(year, month, cancellationToken)).IsPublished;
+
     /// <summary>員工個人班表（只匯出已發布的班表，避免員工拿到還在調整的草稿）。</summary>
     public async Task<string> GetCalendarAsync(int employeeId, int year, int month, CancellationToken cancellationToken = default)
     {

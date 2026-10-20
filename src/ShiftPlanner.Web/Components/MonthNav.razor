@@ -1,0 +1,15 @@
+@* 上一月／下一月切換 *@
+<div class="month-nav">
+    <a href="@($"{BasePath}/{Previous.Year}/{Previous.Month}")" aria-label="上一個月">‹</a>
+    <span class="month-title">@Year 年 @Month 月</span>
+    <a href="@($"{BasePath}/{Next.Year}/{Next.Month}")" aria-label="下一個月">›</a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string BasePath { get; set; } = "";
+    [Parameter, EditorRequired] public int Year { get; set; }
+    [Parameter, EditorRequired] public int Month { get; set; }
+
+    private DateOnly Previous => new DateOnly(Year, Month, 1).AddMonths(-1);
+    private DateOnly Next => new DateOnly(Year, Month, 1).AddMonths(1);
+}

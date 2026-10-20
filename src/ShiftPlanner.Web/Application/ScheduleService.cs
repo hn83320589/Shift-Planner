@@ -74,6 +74,28 @@ public sealed class ScheduleService(
             s.Add(to);
         }, [to.EmployeeId], cancellationToken);
 
+    /// <summary>兩位員工交換某天的班（任一方沒有班也可以，等於把班轉給對方）。</summary>
+    public Task SwapAsync(int year, int month, DateOnly date, int employeeA, int employeeB, CancellationToken cancellationToken = default) =>
+        ModifyAsync(year, month, s =>
+        {
+            var ofA = s.Assignments.Where(a => a.EmployeeId == employeeA && a.Date == date).ToList();
+            var ofB = s.Assignments.Where(a => a.EmployeeId == employeeB && a.Date == date).ToList();
+            foreach (var assignment in ofA.Concat(ofB))
+            {
+                s.Remove(assignment);
+            }
+
+            foreach (var assignment in ofA)
+            {
+                s.Add(assignment with { EmployeeId = employeeB });
+            }
+
+            foreach (var assignment in ofB)
+            {
+                s.Add(assignment with { EmployeeId = employeeA });
+            }
+        }, [employeeA, employeeB], cancellationToken);
+
     /// <summary>重新驗證後發布；有任何硬性違規或人力缺口就拋出 SchedulePublishException。</summary>
     public async Task<ValidationResult> PublishAsync(int year, int month, CancellationToken cancellationToken = default)
     {

@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 
 # macOS
 .DS_Store
+
+# 瀏覽器自動化工具的暫存輸出
+.playwright-mcp/

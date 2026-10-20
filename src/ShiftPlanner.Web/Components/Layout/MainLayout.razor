@@ -1,9 +1,20 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-@Body
+<header class="topbar">
+    <a class="brand" href="/">客服中心排班系統</a>
+    <nav>
+        <NavLink href="/schedule" Match="NavLinkMatch.Prefix">月班表</NavLink>
+        <NavLink href="/reschedule" Match="NavLinkMatch.Prefix">臨時重排</NavLink>
+        <NavLink href="/reports" Match="NavLinkMatch.Prefix">月報</NavLink>
+    </nav>
+</header>
+
+<main class="content">
+    @Body
+</main>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    發生未預期的錯誤。
+    <a href="." class="reload">重新載入</a>
     <span class="dismiss">🗙</span>
 </div>
