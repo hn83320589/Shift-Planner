@@ -139,6 +139,40 @@ namespace ShiftPlanner.Data.Migrations
                     b.ToTable("OffPreferences");
                 });
 
+            modelBuilder.Entity("ShiftPlanner.Core.Domain.RescheduleProposal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BaseRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("LeaveEnd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("LeaveStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScheduleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleId");
+
+                    b.ToTable("RescheduleProposals");
+                });
+
             modelBuilder.Entity("ShiftPlanner.Core.Domain.Schedule", b =>
                 {
                     b.Property<int>("Id")
@@ -185,6 +219,48 @@ namespace ShiftPlanner.Data.Migrations
                     b.HasKey("DayType", "Shift", "Skill");
 
                     b.ToTable("SkillRequirements");
+                });
+
+            modelBuilder.Entity("ShiftPlanner.Core.Domain.RescheduleProposal", b =>
+                {
+                    b.HasOne("ShiftPlanner.Core.Domain.Schedule", null)
+                        .WithMany()
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("ShiftPlanner.Core.Domain.ProposedChange", "Changes", b1 =>
+                        {
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<DateOnly>("Date")
+                                .HasColumnType("TEXT");
+
+                            b1.Property<int>("EmployeeId")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int>("Kind")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int>("ProposalId")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int>("Shift")
+                                .HasColumnType("INTEGER");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ProposalId");
+
+                            b1.ToTable("ProposedChanges", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ProposalId");
+                        });
+
+                    b.Navigation("Changes");
                 });
 
             modelBuilder.Entity("ShiftPlanner.Core.Domain.Schedule", b =>

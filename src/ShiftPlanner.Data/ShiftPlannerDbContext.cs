@@ -19,6 +19,7 @@ public sealed class ShiftPlannerDbContext(DbContextOptions<ShiftPlannerDbContext
     public DbSet<Leave> Leaves => Set<Leave>();
     public DbSet<OffPreference> OffPreferences => Set<OffPreference>();
     public DbSet<Schedule> Schedules => Set<Schedule>();
+    public DbSet<RescheduleProposal> RescheduleProposals => Set<RescheduleProposal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,23 @@ public sealed class ShiftPlannerDbContext(DbContextOptions<ShiftPlannerDbContext
                 a.HasIndex("ScheduleId", nameof(Assignment.Date));
             });
             e.Navigation(x => x.Assignments).UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<RescheduleProposal>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasOne<Schedule>().WithMany().HasForeignKey(x => x.ScheduleId);
+            e.Ignore(x => x.Removed);
+            e.Ignore(x => x.Added);
+            e.Ignore(x => x.Leave);
+            e.OwnsMany(x => x.Changes, c =>
+            {
+                c.ToTable("ProposedChanges");
+                c.WithOwner().HasForeignKey("ProposalId");
+                c.Property<int>("Id");
+                c.HasKey("Id");
+            });
+            e.Navigation(x => x.Changes).UsePropertyAccessMode(PropertyAccessMode.Field);
         });
     }
 }
