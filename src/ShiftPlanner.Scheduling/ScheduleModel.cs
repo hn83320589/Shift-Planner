@@ -23,15 +23,24 @@ internal sealed class ScheduleModel
     private readonly Dictionary<(int Employee, DateOnly Date, ShiftType Shift), BoolVar> _x = [];
     private readonly HashSet<(int Employee, DateOnly Date, ShiftType Shift)> _context;
     private readonly LinearExprBuilder _objective = LinearExpr.NewBuilder();
+    private readonly bool _elastic;
+    private readonly List<DemandSlack> _slacks = [];
 
-    public ScheduleModel(GenerationRequest request)
+    /// <param name="elastic">
+    /// 診斷模式：人數與技能需求加上 slack，夜班差距改為不限制，目標只剩「最小化補不滿的人數」，
+    /// 用來找出無解時是哪些格子排不滿。
+    /// </param>
+    public ScheduleModel(GenerationRequest request, bool elastic = false)
     {
         _request = request;
+        _elastic = elastic;
         _context = request.Context.Select(a => (a.EmployeeId, a.Date, a.Shift)).ToHashSet();
         Build();
     }
 
     public CpModel Model { get; } = new();
+
+    public IReadOnlyList<DemandSlack> Slacks => _slacks;
 
     private DateRange Horizon => _request.Horizon;
 
@@ -49,9 +58,13 @@ internal sealed class ScheduleModel
         AddWeeklyLimits();
         AddConsecutiveDays();
         AddDemand();
-        AddFairness();
-        AddPreferences();
-        AddBaselineDeviation();
+        if (!_elastic)
+        {
+            AddFairness();
+            AddPreferences();
+            AddBaselineDeviation();
+        }
+
         Model.Minimize(_objective);
     }
 
@@ -71,7 +84,10 @@ internal sealed class ScheduleModel
                 {
                     var x = Model.NewBoolVar($"x_{employee.Id}_{date:MMdd}_{shift}");
                     _x[(employee.Id, date, shift)] = x;
-                    _objective.AddTerm(x, ShiftCost); // 需求是「最低」人數，避免無謂地多排
+                    if (!_elastic)
+                    {
+                        _objective.AddTerm(x, ShiftCost); // 需求是「最低」人數，避免無謂地多排
+                    }
                 }
             }
         }
@@ -88,7 +104,7 @@ internal sealed class ScheduleModel
     /// <summary>找出休息不足的「前一班 → 後一班」組合，禁止同時出現。</summary>
     private void AddRestPeriods()
     {
-        var conflicts = RestConflicts().ToList();
+        var conflicts = RestConflicts.For(_request.Catalog);
         foreach (var employee in _request.Employees)
         {
             foreach (var date in Horizon.Days())
@@ -111,26 +127,6 @@ internal sealed class ScheduleModel
                     else if (_x.TryGetValue((employee.Id, prevDate, prevShift), out var prev))
                     {
                         Model.AddBoolOr([prev.Not(), next.Not()]);
-                    }
-                }
-            }
-        }
-    }
-
-    private IEnumerable<(int Offset, ShiftType Prev, ShiftType Next)> RestConflicts()
-    {
-        var reference = new DateOnly(2000, 1, 3);
-        for (var offset = 1; offset <= 2; offset++)
-        {
-            foreach (var prev in DisplayNames.AllShifts)
-            {
-                foreach (var next in DisplayNames.AllShifts)
-                {
-                    var prevEnd = _request.Catalog.GetInterval(new Assignment(0, reference, prev)).End;
-                    var nextStart = _request.Catalog.GetInterval(new Assignment(0, reference.AddDays(offset), next)).Start;
-                    if (nextStart - prevEnd < RestPeriodRule.DefaultMinimumRest)
-                    {
-                        yield return (offset, prev, next);
                     }
                 }
             }
@@ -190,15 +186,29 @@ internal sealed class ScheduleModel
             foreach (var shift in DisplayNames.AllShifts)
             {
                 var slot = _x.Where(kv => kv.Key.Date == date && kv.Key.Shift == shift).ToList();
-                Model.AddLinearConstraint(SumOf(slot.Select(kv => kv.Value)), _request.Calendar.GetMinStaff(date, shift), long.MaxValue);
+                AddAtLeast(SumOf(slot.Select(kv => kv.Value)), _request.Calendar.GetMinStaff(date, shift), date, shift, null);
 
                 foreach (var requirement in _request.Calendar.GetSkillRequirements(date, shift))
                 {
                     var skilled = slot.Where(kv => employees[kv.Key.Employee].HasSkill(requirement.Skill)).Select(kv => kv.Value);
-                    Model.AddLinearConstraint(SumOf(skilled), requirement.MinCount, long.MaxValue);
+                    AddAtLeast(SumOf(skilled), requirement.MinCount, date, shift, requirement.Skill);
                 }
             }
         }
+    }
+
+    private void AddAtLeast(LinearExpr staffed, int required, DateOnly date, ShiftType shift, Skills? skill)
+    {
+        if (!_elastic || required == 0)
+        {
+            Model.AddLinearConstraint(staffed, required, long.MaxValue);
+            return;
+        }
+
+        var slack = Model.NewIntVar(0, required, $"slack_{date:MMdd}_{shift}_{skill}");
+        Model.AddLinearConstraint(LinearExpr.NewBuilder().Add(staffed).Add(slack), required, long.MaxValue);
+        _objective.Add(slack);
+        _slacks.Add(new DemandSlack(date, shift, skill, required, slack));
     }
 
     /// <summary>全職員工之間的夜班數與週末班數盡量平均；夜班差距可設為硬限制。</summary>
@@ -324,3 +334,6 @@ internal sealed class ScheduleModel
         return sum;
     }
 }
+
+/// <summary>診斷模式下，某格需求補不滿的人數。</summary>
+internal sealed record DemandSlack(DateOnly Date, ShiftType Shift, Skills? Skill, int Required, IntVar Shortfall);

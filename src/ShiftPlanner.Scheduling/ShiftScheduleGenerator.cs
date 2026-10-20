@@ -15,13 +15,14 @@ public sealed class ShiftScheduleGenerator
     public GenerationResult Generate(GenerationRequest request)
     {
         var stopwatch = Stopwatch.StartNew();
-        var model = new ScheduleModel(request);
-        var solver = new CpSolver
+        var precheck = FeasibilityPrecheck.Check(request);
+        if (precheck.Count > 0)
         {
-            StringParameters = string.Create(CultureInfo.InvariantCulture,
-                $"max_time_in_seconds:{request.TimeLimit.TotalSeconds} num_workers:8 random_seed:42"),
-        };
+            return new GenerationResult(GenerationStatus.Infeasible, [], precheck, stopwatch.Elapsed);
+        }
 
+        var model = new ScheduleModel(request);
+        var solver = CreateSolver(request);
         var status = solver.Solve(model.Model);
         switch (status)
         {
@@ -34,8 +35,8 @@ public sealed class ShiftScheduleGenerator
                     assignments, [], stopwatch.Elapsed);
 
             case CpSolverStatus.Infeasible:
-                return new GenerationResult(GenerationStatus.Infeasible, [],
-                    [new InfeasibilityReason(null, null, 0, 0, "在所有硬性限制下找不到可行的班表")], stopwatch.Elapsed);
+                var reasons = InfeasibilityDiagnoser.Diagnose(request, () => CreateSolver(request));
+                return new GenerationResult(GenerationStatus.Infeasible, [], reasons, stopwatch.Elapsed);
 
             case CpSolverStatus.Unknown:
                 return new GenerationResult(GenerationStatus.TimedOut, [],
@@ -46,6 +47,12 @@ public sealed class ShiftScheduleGenerator
                 throw new InvalidOperationException($"CP-SAT 回傳非預期狀態 {status}：{solver.SolutionInfo()}");
         }
     }
+
+    private static CpSolver CreateSolver(GenerationRequest request) => new()
+    {
+        StringParameters = string.Create(CultureInfo.InvariantCulture,
+            $"max_time_in_seconds:{request.TimeLimit.TotalSeconds} num_workers:8 random_seed:42"),
+    };
 
     /// <summary>產生器與 validator 是兩套獨立實作；結果不一致代表程式有錯，直接拋出。</summary>
     private void EnsureValid(GenerationRequest request, IReadOnlyList<Core.Domain.Assignment> assignments)
