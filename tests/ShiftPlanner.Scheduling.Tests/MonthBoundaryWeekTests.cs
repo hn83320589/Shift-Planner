@@ -24,7 +24,7 @@ public class MonthBoundaryWeekTests(GeneratedNovemberFixture fixture) : IClassFi
         Assert.Equal(GenerationStatus.Infeasible, result.Status);
         var reason = Assert.Single(result.Reasons, r => r.Date == Nov1 && r.Shift is null);
         Assert.Equal((8, 6), (reason.Required, reason.Available));
-        Assert.Contains("10 人因上個月月底的排班當天必須休假", reason.Message);
+        Assert.Equal("11/1 共需要 8 人上班，但只有 6 人可排，其中 10 人因上個月月底的排班當天必須休假（每週休息日、連續上班或週工時限制）", reason.Message);
     }
 
     [Fact]

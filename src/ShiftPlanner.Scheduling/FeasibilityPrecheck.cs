@@ -128,7 +128,7 @@ internal static class FeasibilityPrecheck
                 causes.Add($"{forcedByNext} 人因下個月月初的排班當天必須休假");
             }
 
-            var because = causes.Count > 0 ? $"，其中{string.Join("、", causes)}（每週休息日、連續上班或週工時限制）" : "";
+            var because = causes.Count > 0 ? $"，其中 {string.Join("、", causes)}（每週休息日、連續上班或週工時限制）" : "";
             yield return new InfeasibilityReason(date, null, required, available,
                 $"{date.ToLabel()} 共需要 {required} 人上班，但只有 {available} 人可排{because}");
         }
