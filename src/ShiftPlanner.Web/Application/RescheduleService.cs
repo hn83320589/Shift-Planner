@@ -55,6 +55,7 @@ public sealed class RescheduleService(
             Published = schedule.Assignments,
             FromDate = leaveStart,
             PreviousMonth = data.PreviousMonth,
+            NextMonth = data.NextMonth,
             Leaves = [.. data.Leaves, new Leave(employeeId, leaveStart, leaveEnd)],
             Preferences = data.Preferences,
         });
@@ -79,7 +80,10 @@ public sealed class RescheduleService(
     public Task<RescheduleProposal?> FindAsync(int proposalId, CancellationToken cancellationToken = default) =>
         db.RescheduleProposals.SingleOrDefaultAsync(p => p.Id == proposalId, cancellationToken);
 
-    /// <summary>主管確認後套用：登記請假、更新班表、版本 +1。提案產生後班表若又變動則拒絕。</summary>
+    /// <summary>
+    /// 主管確認後套用：登記請假、更新班表、版本 +1。提案產生後班表若又變動則拒絕。
+    /// 套用前同時驗證本月（含已發布的下個月開頭）與已發布的下個月本身，任一有違規就不套用。
+    /// </summary>
     public async Task ApplyAsync(int proposalId, CancellationToken cancellationToken = default)
     {
         var proposal = await FindAsync(proposalId, cancellationToken)
@@ -95,12 +99,36 @@ public sealed class RescheduleService(
         var after = schedule.Assignments.Except(proposal.Removed).Concat(proposal.Added).ToList();
         var leaves = data.Leaves.Append(proposal.Leave).ToList();
         var validation = validator.Validate(
-            new ScheduleSnapshot(data.Period, data.Employees, after, data.Calendar, data.PreviousMonth, leaves));
+            new ScheduleSnapshot(data.Period, data.Employees, after, data.Calendar, data.PreviousMonth, leaves, following: data.NextMonth));
+        await EnsureNextMonthStillValidAsync(schedule, after, proposal.Leave, cancellationToken);
 
         schedule.ApplyRevision(proposal.Removed, proposal.Added, validation);
         db.Leaves.Add(proposal.Leave);
         proposal.MarkApplied();
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>以重排後的本月作為上下文，重新驗證已發布的下個月。</summary>
+    private async Task EnsureNextMonthStillValidAsync(
+        Schedule schedule, IReadOnlyList<Assignment> monthAfter, Leave newLeave, CancellationToken cancellationToken)
+    {
+        var next = schedule.Period.Start.AddMonths(1);
+        var nextData = await loader.LoadAsync(next.Year, next.Month, cancellationToken);
+        var nextAssignments = await loader.PublishedAssignmentsAsync(next.Year, next.Month, cancellationToken);
+        if (nextAssignments.Count == 0)
+        {
+            return;
+        }
+
+        var nextValidation = validator.Validate(new ScheduleSnapshot(
+            nextData.Period, nextData.Employees, nextAssignments, nextData.Calendar, monthAfter,
+            [.. nextData.Leaves, newLeave], following: nextData.NextMonth));
+        if (nextValidation.Violations.Count > 0)
+        {
+            throw new SchedulePublishException(
+                $"套用後已發布的 {next.Year}/{next.Month} 班表會出現 {nextValidation.Violations.Count} 個違規：{nextValidation.Violations[0].Message}",
+                nextValidation);
+        }
     }
 
     public async Task DiscardAsync(int proposalId, CancellationToken cancellationToken = default)

@@ -96,12 +96,20 @@ public sealed class ScheduleService(
             }
         }, [employeeA, employeeB], cancellationToken);
 
-    /// <summary>重新驗證後發布；有任何硬性違規或人力缺口就拋出 SchedulePublishException。</summary>
+    /// <summary>
+    /// 重新驗證後發布；有任何硬性違規或人力缺口就拋出 SchedulePublishException。
+    /// 必須依序發布：上個月已建立但還是草稿時不能發布，否則跨月限制沒有被檢查過。
+    /// </summary>
     public async Task<ValidationResult> PublishAsync(int year, int month, CancellationToken cancellationToken = default)
     {
         var schedule = await FindAsync(year, month, cancellationToken)
             ?? throw new InvalidOperationException($"{year}/{month} 尚未建立班表");
         var data = await loader.LoadAsync(year, month, cancellationToken);
+        if (data.PreviousMonthIsDraft)
+        {
+            throw new InvalidOperationException(
+                $"{data.PreviousMonthStart.Year}/{data.PreviousMonthStart.Month} 班表尚未發布；請先發布上個月，跨月的休息與連續上班限制才能檢查");
+        }
         var validation = validator.Validate(data.Snapshot(schedule.Assignments));
 
         schedule.Publish(validation, time.GetUtcNow());

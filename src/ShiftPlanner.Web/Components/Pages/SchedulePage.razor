@@ -25,8 +25,9 @@
                 {
                     <button class="btn" @onclick="RequestGenerate" disabled="@_busy">@(_busy ? "產生中…" : "自動產生班表")</button>
                 }
-                <button class="btn primary" @onclick="PublishAsync" disabled="@(_busy || !_state.Validation.CanPublish || _state.Assignments.Count == 0)"
-                        title="@(_state.Validation.CanPublish ? "發布班表" : "仍有違規或人力缺口，無法發布")">
+                <button class="btn primary" @onclick="PublishAsync"
+                        disabled="@(_busy || !_state.Validation.CanPublish || _state.Assignments.Count == 0 || _state.Data.PreviousMonthIsDraft)"
+                        title="@PublishTitle">
                     發布
                 </button>
             </div>
@@ -77,6 +78,19 @@ else
     else if (_state.Assignments.Count == 0)
     {
         <div class="alert info">這個月還沒有班表，請按「自動產生班表」。</div>
+    }
+
+    @if (_state.Data.PreviousMonthIsDraft)
+    {
+        var previous = _state.Data.PreviousMonthStart;
+        <div class="alert warn">
+            上個月（<a href="/schedule/@previous.Year/@previous.Month">@previous.Year/@previous.Month</a>）班表還是草稿：
+            跨月的休息、連續上班與每週限制要等上個月發布後才會納入檢查，本月也要等上個月發布後才能發布。
+        </div>
+    }
+    @if (_state.Data.NextMonth is not null)
+    {
+        <p class="muted">下個月已發布，月底的班會連同下個月開頭一起檢查休息、連續上班與每週限制。</p>
     }
 
     <div class="summary-bar">
@@ -459,6 +473,13 @@ else
         { IsPublished: true } s => $"已發布 · 第 {s.Revision} 版",
         { Exists: true } => "草稿",
         _ => "尚未建立",
+    };
+
+    private string PublishTitle => _state switch
+    {
+        { Data.PreviousMonthIsDraft: true } => "上個月尚未發布，請先發布上個月",
+        { Validation.CanPublish: false } => "仍有違規或人力缺口，無法發布",
+        _ => "發布班表",
     };
 
     private string StatusClass => _state is { IsPublished: true } ? "published" : "draft";
