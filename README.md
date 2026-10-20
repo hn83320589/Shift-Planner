@@ -13,6 +13,8 @@
 
 **亮點**：CP-SAT 建模、可解釋的無解診斷、最小變動的臨時重排、產生器與 Validator 兩套實作交叉檢查、勞基法限制的跨月雙向處理。
 
+📘 想了解這個系統是怎麼分析、設計與實作的？請看 [教學文件](docs/tutorial/README.md)。
+
 ---
 
 ## 啟動方式
@@ -68,6 +70,7 @@ tests/
 data/holidays-2026.json       2026 年台灣國定假日
 docs/architecture.md          開發前的系統分析與架構設計
 docs/test-report.md           驗收測試報告
+docs/tutorial/                教學文件：系統分析、架構、核心演算法、測試策略（12 章）
 ```
 
 依賴方向：`Web → Scheduling / Data → Core`。Validator 在 Core，產生器在 Scheduling，**兩者是分開的實作**。產生器的結果一定會再交給 Validator 檢查；兩邊結論不一致就直接拋出例外，視為程式錯誤。
