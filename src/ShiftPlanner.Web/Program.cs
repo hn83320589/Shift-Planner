@@ -22,6 +22,7 @@ builder.Services.AddScoped<PlanningDataLoader>();
 builder.Services.AddSingleton<Rescheduler>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<RescheduleService>();
+builder.Services.AddScoped<ReportService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddDbContext<ShiftPlannerDbContext>(options =>
@@ -45,6 +46,7 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapScheduleApi();
 app.MapRescheduleApi();
+app.MapReportApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
